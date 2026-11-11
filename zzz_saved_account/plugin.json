@@ -1,0 +1,21 @@
+{
+  "id": "zzz_saved_account",
+  "name": "已保存账号免密切换",
+  "summary": "多账号玩家切换账号时，直接点选游戏里已保存的登录记录，不再走「退出 → 输入账号密码」。插件给进入游戏流程打补丁：标题界面点切换账号 → 退出登录确认框选「退出并保留登录记录」→ 展开账号下拉 → 按掩码手机号选中当前实例配置的账号 → 点进入游戏。",
+  "version": "1.2.0",
+  "versionCode": 3,
+  "author": {
+    "name": "你的名字",
+    "url": "https://github.com/your-name"
+  },
+  "homepage": "https://github.com/your-name/zzzod-plugin-saved-account",
+  "risk": [
+    "ocr",
+    "automation"
+  ],
+  "compatibility": {
+    "minAppVersion": "2.4.4",
+    "minCoreApiVersion": 1,
+    "python": ">=3.11"
+  }
+}
