@@ -13,12 +13,12 @@
 - ``GameAccountConfig.has_login_info``：配置了 ``saved_account`` 时视为已有登录方式，
   避免一条龙把「强制重新登录」降级掉。
 
-目标账号不新增核心配置项，直接复用每个实例的 ``config/<实例>/game_account.yml``
-里的自定义字段::
+目标账号保存在插件自己的数据目录 ``plugin_data/zzz_saved_account/targets.json``，
+按实例号区分；一条龙更新插件代码时不会碰这个目录，也不会和主程序的账号密码
+配置混在一起。旧版本写在 ``config/<实例>/game_account.yml`` 里的 ``saved_account``
+字段会在第一次读取时自动迁移过去并删除。
 
-    saved_account: '138******00'
-
-留空或不写该字段时，补丁完全不介入，行为和原生一致。
+留空时补丁完全不介入，行为和原生一致。
 """
 
 from __future__ import annotations
@@ -40,6 +40,8 @@ from one_dragon.utils import cv2_utils
 from one_dragon.utils.log_utils import log
 from zzz_od.operation.enter_game.enter_game import EnterGame
 from zzz_od.operation.enter_game.switch_account import SwitchAccount
+
+from . import account_store
 
 # 账号选择弹窗的识别区域（1920x1080 标准坐标系）
 # 覆盖整个弹窗内容区，避开标题和右上角关闭按钮
@@ -205,20 +207,17 @@ def pick_row(rows: list[AccountRow], target: str) -> AccountRow | None:
 def _saved_account_of(game_account_config) -> str:
     """读取某个实例配置的目标已保存账号，未配置时返回空串。"""
     try:
-        value = game_account_config.get('saved_account', '')
+        return account_store.get_target(getattr(game_account_config, 'instance_idx', None))
     except Exception:
         return ''
-    if value is None:
-        return ''
-    return str(value).strip()
 
 
 def _read_saved_account(enter_game: EnterGame) -> str:
     """读取当前实例配置的目标已保存账号。"""
     try:
-        return _saved_account_of(enter_game.ctx.game_account_config)
+        return account_store.get_target(enter_game.ctx.current_instance_idx)
     except Exception:
-        log.error('读取 saved_account 配置失败', exc_info=True)
+        log.error('读取目标账号配置失败', exc_info=True)
         return ''
 
 
@@ -349,12 +348,14 @@ def _handle_credential_page(op) -> OperationRoundResult:
 
 
 def _handle_saved_account_dialog(op, rows: list[AccountRow], target: str) -> OperationRoundResult:
-    """在已保存账号列表里点选目标账号。"""
+    """在已保存账号列表里点选目标账号。
+
+    日志和节点状态里都不写具体账号：只写识别到几条记录，方便用户直接贴日志。
+    """
     row = pick_row(rows, target)
     if row is None:
         _bump(op, '_saved_account_tries')
-        found = '、'.join(r.digits for r in rows)
-        status = f'未找到已保存账号 {target}，当前识别到: {found}'
+        status = f'未找到目标账号（画面中识别到 {len(rows)} 条登录记录）'
         if _counter(op, '_saved_account_tries') > MAX_TRIES:
             return op.round_fail(status)
         return op.round_retry(status, wait=2)
@@ -363,21 +364,20 @@ def _handle_saved_account_dialog(op, rows: list[AccountRow], target: str) -> Ope
     last_click = getattr(op, '_saved_account_last_click', 0.0)
     if last_click > 0 and now - last_click < WAIT_AFTER_CLICK:
         # 刚点过，等游戏反应，避免重复点击
-        return op.round_wait(f'等待已保存账号 {target} 登录', wait=2)
+        return op.round_wait('等待目标账号登录', wait=2)
 
     _bump(op, '_saved_account_clicks')
     if _counter(op, '_saved_account_clicks') > MAX_TRIES:
-        found = '、'.join(r.digits for r in rows)
-        return op.round_fail(f'点击已保存账号 {target} 无效，当前识别到: {found}')
+        return op.round_fail(f'点击目标账号无效（画面中识别到 {len(rows)} 条登录记录）')
 
-    log.info('检测到已保存账号弹窗，点选 %s (位置 %s)', target, row.center)
+    log.info('检测到已保存账号弹窗，点选目标账号 (位置 %s)', row.center)
     op.ctx.controller.click(row.center)
     op._saved_account_last_click = now
     op._saved_account_tries = 0
     op._saved_account_back_clicks = 0
     if hasattr(op, 'already_login'):
         op.already_login = True
-    return op.round_wait(f'已选择保存的账号 {target}', wait=3)
+    return op.round_wait('已选择保存的账号', wait=3)
 
 
 def _is_title_screen(op, screen: MatLike) -> bool:
@@ -479,7 +479,7 @@ def _handle_login_page(op, texts: set[str], target: str) -> OperationRoundResult
         if point is None:
             return None
         _bump(op, '_saved_account_enter_clicks')
-        log.info('已选好账号 %s，点击「进入游戏」 %s', target, point)
+        log.info('已选好账号，点击「进入游戏」 %s', point)
         op.ctx.controller.click(point)
         return op.round_wait('点击进入游戏', wait=3)
 

@@ -47,11 +47,11 @@ class SavedAccountApp(Application):
         target = _read_saved_account(self)
         if target == '':
             return self.round_fail(
-                f'当前实例（{self.ctx.current_instance_idx:02d}）未配置 saved_account，'
-                f'请在 config/{self.ctx.current_instance_idx:02d}/game_account.yml 里填写'
+                f'当前实例（{self.ctx.current_instance_idx:02d}）没有配置目标账号，'
+                f'请在插件管理里点这个插件的齿轮图标填写'
             )
 
-        log.info('准备把游戏切换到已保存账号 %s', target)
+        log.info('准备把游戏切换到已保存的目标账号')
 
         if self._enter_game.is_in_big_world(self.last_screenshot) is not None:
             log.info('游戏已在大世界，先登出再选择账号')
